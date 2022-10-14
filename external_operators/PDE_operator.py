@@ -21,7 +21,7 @@ class PDEOperator(AbstractExternalOperator):
         u = TrialFunction(V)
         v = TestFunction(V)
         a = inner(grad(u), grad(v)) * dx
-        L = f*v*dx
+        L = f * v * dx
         bcs = [DirichletBC(V, Constant(1.0), "on_boundary")]
         w = Function(V)
         # Solve PDE
@@ -55,7 +55,7 @@ class PDEOperator(AbstractExternalOperator):
 
         # Get TLM value
         dJdm = self.operator_data['solution'].block_variable.tlm_value
-        assert(dJdm != None)
+        assert dJdm
 
         return dJdm
 
@@ -76,7 +76,7 @@ class PDEOperator(AbstractExternalOperator):
 
         # Get TLM value
         dJdm_adj = self.operator_data['control'].block_variable.adj_value
-        assert(dJdm_adj != None)
+        assert dJdm_adj
 
         return dJdm_adj.function
 
@@ -107,7 +107,7 @@ class PDEOperator(AbstractExternalOperator):
 
         # Record result
         self.operator_data['solution'] = solution
-                
+
         # Record tape
         self.operator_data['tape'] = forward_tape
 
@@ -140,7 +140,7 @@ class PDEOperator(AbstractExternalOperator):
             current_time = time.time()
             for b in self.operator_data['tape'].get_blocks():
                 b.recompute()
-            print("Recomputing tape blocks in %.2e s" %(time.time()-current_time), flush=True)
+            print("Recomputing tape blocks in %.2e s" % (time.time() - current_time), flush=True)
 
     def prepare_adjoint_computation(self, f, pde_params):
         # Check if we need to recompute the tape
@@ -165,8 +165,7 @@ class PDEOperator(AbstractExternalOperator):
             current_time = time.time()
             for b in self.operator_data['tape'].get_blocks():
                 b.recompute()
-            print("Recomputing tape blocks in %.2e s" %(time.time()-current_time), flush=True)
-
+            print("Recomputing tape blocks in %.2e s" % (time.time() - current_time), flush=True)
 
 
 # Helper function #
