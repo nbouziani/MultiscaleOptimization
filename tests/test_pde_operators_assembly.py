@@ -130,7 +130,7 @@ def compute_tlm(forward_operator, f, tlm_value, **operator_kwargs):
 
     # Get TLM value
     dJdm = res.block_variable.tlm_value
-    assert dJdm
+    assert dJdm is not None
 
     return dJdm
 
@@ -150,13 +150,13 @@ def compute_adjoint(forward_operator, f, adj_value, **operator_kwargs):
     tape.reset_variables()
 
     # Set seed for adjoint
-    res.block_variable.adj_value = adj_value.vector()
+    res.block_variable.adj_value = adj_value
 
     # Evaluate adjoint
     tape.evaluate_adj()
 
     # Get adjoint value
     dJdm_adj = c.block_variable.adj_value
-    assert dJdm_adj
+    assert dJdm_adj is not None
 
     return dJdm_adj.function
