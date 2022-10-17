@@ -94,13 +94,13 @@ class PDEOperator(AbstractExternalOperator):
         pde_params = self.operator_data['pde_params']
         self.prepare_adjoint_computation(f, pde_params)
 
-        # Assign tlm value
+        # Assign adjoint value
         self.operator_data['solution'].block_variable.adj_value = self.argument_slots()[0].vector()
 
-        # Evaluate TLM
+        # Evaluate adjoint
         self.operator_data['tape'].evaluate_adj()
 
-        # Get TLM value
+        # Get adjoint value
         dJdm_adj = self.operator_data['control'].block_variable.adj_value
         assert dJdm_adj is not None
 
@@ -143,9 +143,9 @@ class PDEOperator(AbstractExternalOperator):
 
         fda.set_working_tape(working_tape)
 
-    def prepare_tlm_computation(self, f, pde_params):
+    def prepare_tlm_computation(self, f, pde_params, recompute_tape=False):
         # Check if we need to recompute the tape
-        if not ('tape' in self.operator_data.keys()):
+        if recompute_tape or ('tape' not in self.operator_data.keys()):
             self.compute_tape(f, pde_params)
 
         # Reset TLM values
@@ -168,9 +168,9 @@ class PDEOperator(AbstractExternalOperator):
                 b.recompute()
             print("Recomputing tape blocks in %.2e s" % (time.time() - current_time), flush=True)
 
-    def prepare_adjoint_computation(self, f, pde_params):
+    def prepare_adjoint_computation(self, f, pde_params, recompute_tape=False):
         # Check if we need to recompute the tape
-        if not ('tape' in self.operator_data.keys()):
+        if recompute_tape or ('tape' not in self.operator_data.keys()):
             self.compute_tape(f, pde_params)
 
         # Reset adjoint values
