@@ -3,6 +3,31 @@ import firedrake_adjoint as fda
 
 
 class PDEOperator(AbstractExternalOperator):
+    r"""External operator that represents the solution of a given PDE.
+
+        The PDEOperator class is equipped with 3 assembly methods that correspond to the assembly of: the operator,
+        the action of its Jacobian, and the action of the adjoint of the Jacobian of N. A PDEOperator object can
+        be added to any PDE or PDE-constrained optimization problem and the assembly of the terms derived from N
+        will be delegated to the assembly methods of the PDEOperator class.
+
+        Let `N` be a PDEOperator:
+
+        - The evaluation of N will produce the solution of the underlying PDE of the PDEOperator class.
+          -> Remark: The underlying PDE can be changed by overwriting the `_solve_pde` method.
+
+        - The action of the Jacobian of N is evaluated by computing the tangent linear model of the PDE.
+
+        - Likewise, the action of the adjoint of the Jacobian of N is evaluated by computing the adjoint model of the PDE.
+
+        Example: We want to find u such that:
+
+            - \Delta u + u = f  in  \Omega
+                         u = g  on  \partial Omega
+
+        where g is the boundary condition and where f is the solution of another PDE.
+        This can be implemented by defining the above PDE where f is a PDEOperator object
+        representing the solution of the PDE satisfied by f.
+    """
 
     def __init__(self, *operands, function_space, derivatives=None, **kwargs):
         AbstractExternalOperator.__init__(self, *operands, function_space=function_space, derivatives=derivatives, **kwargs)
@@ -17,7 +42,8 @@ class PDEOperator(AbstractExternalOperator):
         f, = pde_inputs
         # Set the variational problem
         mesh = pde_params.get('mesh')
-        V = FunctionSpace(mesh, "CG", 2)
+        degree = pde_params.get('degree', 2)
+        V = FunctionSpace(mesh, "CG", degree)
         u = TrialFunction(V)
         v = TestFunction(V)
         a = inner(grad(u), grad(v)) * dx
