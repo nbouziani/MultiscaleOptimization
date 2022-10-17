@@ -81,7 +81,7 @@ class PDEOperator(AbstractExternalOperator):
 
         # Get TLM value
         dJdm = self.operator_data['solution'].block_variable.tlm_value
-        assert dJdm
+        assert dJdm is not None
 
         return dJdm
 
@@ -102,7 +102,7 @@ class PDEOperator(AbstractExternalOperator):
 
         # Get TLM value
         dJdm_adj = self.operator_data['control'].block_variable.adj_value
-        assert dJdm_adj
+        assert dJdm_adj is not None
 
         return dJdm_adj.function
 
