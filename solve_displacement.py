@@ -1,8 +1,31 @@
+# Run commands (examples):
+# -> python solve_displacement.py -operator pde_operator -nx 20 -ny 20 -degree 2
+# -> python solve_displacement.py -operator multiscale_operator -nx 5 -ny 5 -degree 1
+import numpy as np
+import argparse
+
 from firedrake import *
 from firedrake_adjoint import *
-import numpy as np
-from external_operators.PDE_operator import pde_operator
+
+from external_operators.pde_operator import pde_operator
+from external_operators.multiscale_operator import multiscale_operator
 from tests.test_pde_operators_assembly import compute_adjoint, compute_tlm
+
+
+# Retrieve arguments
+parser = argparse.ArgumentParser()
+parser.add_argument('-nx', type=int, default=5)
+parser.add_argument('-ny', type=int, default=5)
+parser.add_argument('-degree', type=int, default=1)
+parser.add_argument('-operator', type=str, default='pde_operator',
+                    help='one of [`pde_operator`, `multiscale_operator`]')
+args = parser.parse_args()
+# Set hyperparameters
+nx, ny = args.nx, args.ny
+degree = args.degree
+operator = args.operator
+if operator not in ('pde_operator', 'multiscale_operator'):
+    raise ValueError('Invalid operator: %s' % operator)
 
 
 def solve_elasticity(nx, ny, external_operator=False, options=None, **kwargs):
@@ -28,14 +51,18 @@ def solve_elasticity(nx, ny, external_operator=False, options=None, **kwargs):
     v = TestFunction(V)
 
     if external_operator:
-        operator_data = {'pde_params': {'mesh': mesh, 'solver_parameters': {"ksp_type": "preonly", "pc_type": "lu"}}}
-        Vf = FunctionSpace(mesh, "CG", 2)
-        p = pde_operator(function_space=Vf, operator_data=operator_data)
-        # Set rhs to 0
+        operator_data = {'pde_params': {'mesh': mesh, 'degree': degree,
+                                        'solver_parameters': {"ksp_type": "preonly", "pc_type": "lu"}}}
+        Vf = FunctionSpace(mesh, "CG", degree)
+        external_op = pde_operator if operator == 'pde_operator' else multiscale_operator
+        p = external_op(function_space=Vf, operator_data=operator_data)
+        # Set rhs to 0 (trivial example)
         f_poisson = Function(Vf)
-        # N is solution of:
-        #  - \Delta u = f_poisson in Omega
+        # N is the solution of the following PDE at each point:
+        #  - \Delta u = f_poisson * g(xi, yi) in \Omega
         #           u = 1   on \partial \Omega
+        #   with xi, yi \in \Omega.
+        #
         #   => For f_poisson = 0, we have u = 1
         #   => N = 1
         N = p(f_poisson)
@@ -59,25 +86,30 @@ options_elasticity = {"ksp_type": "cg",
                       "ksp_converged_reason": None}
 
 
-u = solve_elasticity(100, 100, options=options_elasticity)
-u_external_operator = solve_elasticity(100, 100, external_operator=True, options=options_elasticity)
+u = solve_elasticity(nx, ny, options=options_elasticity)
+u_external_operator = solve_elasticity(nx, ny, external_operator=True, options=options_elasticity)
 assert np.allclose(u.dat.data_ro, u_external_operator.dat.data_ro)
 
 
 # --  Check assembly of the Jacobian action of the operator, i.e. dNdu(f; delta_f, v*) -- #
 
 # Set problem
-mesh = UnitSquareMesh(20, 20)
-V = FunctionSpace(mesh, "CG", 2)
+mesh = UnitSquareMesh(nx, ny)
+V = FunctionSpace(mesh, "CG", degree)
 # Set rhs
 x, y = SpatialCoordinate(mesh)
 f_poisson = Function(V).interpolate(cos(2 * pi * x) * sin(2 * pi * y))
+# Set coordinates
+coordspace = VectorFunctionSpace(mesh, "CG", degree)
+coords = interpolate(as_vector([x, y]), coordspace)
 
 # N is solution of:
 #  - \Delta u = f_poisson in Omega
 #           u = 1   on \partial \Omega
-operator_data = {'pde_params': {'mesh': mesh, 'solver_parameters': {"ksp_type": "preonly", "pc_type": "lu"}}}
-p = pde_operator(function_space=V, operator_data=operator_data)
+operator_data = {'pde_params': {'mesh': mesh, 'degree': degree,
+                                'solver_parameters': {"ksp_type": "preonly", "pc_type": "lu"}}}
+external_op = pde_operator if operator == 'pde_operator' else multiscale_operator
+p = external_op(function_space=V, operator_data=operator_data)
 N = p(f_poisson)
 
 
@@ -92,7 +124,15 @@ def J_N_action(N, f_poisson, delta_f):
 delta_f = Function(V).assign(1)
 a = J_N_action(N, f_poisson, delta_f)
 forward_pde = N._solve_pde
-b = compute_tlm(forward_pde, f_poisson, tlm_value=delta_f, **operator_data['pde_params'])
+# Compute TLM
+if operator == 'pde_operator':
+    b = compute_tlm(forward_pde, f_poisson, tlm_value=delta_f, **operator_data['pde_params'])
+else:
+    b = Function(V)
+    for i, ci in enumerate(coords.dat.data_ro):
+        operator_data['pde_params']['coords'] = ci
+        b.dat.data[i] = compute_tlm(forward_pde, f_poisson, tlm_value=delta_f, **operator_data['pde_params'])
+# Check
 assert np.allclose(a.dat.data_ro, b.dat.data_ro)
 
 
@@ -112,6 +152,13 @@ def J_N_adjoint_action(N, f_poisson, delta_N):
 delta_N = Cofunction(V.dual())
 delta_N.vector()[:] = 1
 a = J_N_adjoint_action(N, f_poisson, delta_N)
-forward_pde = N._solve_pde
-b = compute_adjoint(forward_pde, f_poisson, adj_value=delta_N, **operator_data['pde_params'])
+# Compute adjoint
+if operator == 'pde_operator':
+    b = compute_adjoint(forward_pde, f_poisson, adj_value=delta_N.vector(), **operator_data['pde_params'])
+else:
+    b = Function(V)
+    for i, ci in enumerate(coords.dat.data_ro):
+        operator_data['pde_params']['coords'] = ci
+        bi = compute_adjoint(forward_pde, f_poisson, adj_value=delta_N.vector()[i], **operator_data['pde_params'])
+        b.dat.data[i] = bi.dat.data_ro[i]
 assert np.allclose(a.dat.data_ro, b.dat.data_ro)
