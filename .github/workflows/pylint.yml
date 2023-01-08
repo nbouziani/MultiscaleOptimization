@@ -1,4 +1,4 @@
-name: Pylint
+name: Run lint
 
 on: [push]
 
@@ -17,7 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
-    - name: Analysing the code with pylint
+        pip install flake8 pylint
+    - name: Lint
       run: |
-        pylint $(git ls-files '*.py')
+        make lint
